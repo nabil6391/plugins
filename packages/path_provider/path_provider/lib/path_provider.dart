@@ -7,37 +7,42 @@ import 'dart:io' show Directory, Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path_provider_linux/path_provider_linux.dart';
-import 'package:path_provider_windows/path_provider_windows.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:path_provider_platform_interface/src/method_channel_path_provider.dart';
 
 export 'package:path_provider_platform_interface/path_provider_platform_interface.dart'
     show StorageDirectory;
 
+/// Disables platform override in order to use a manually registered [PathProviderPlatform], only for testing right now
+///
+/// Make sure to disable the override before using any of the `path_provider` methods
+/// To use your own [PathProviderPlatform], make sure to include the following lines
+/// ```
+/// PathProviderPlatform.instance = YourPathProviderPlatform();
+/// disablePathProviderPlatformOverride = true;
+/// // Use the `path_provider` methods:
+/// final dir = await getTemporaryDirectory();
+/// ```
+/// See this issue https://github.com/flutter/flutter/issues/52267 for why this is required
 @visibleForTesting
-@Deprecated('This is no longer necessary, and is now a no-op')
-set disablePathProviderPlatformOverride(bool override) {}
+set disablePathProviderPlatformOverride(bool override) {
+  _disablePlatformOverride = override;
+}
 
-bool _manualDartRegistrationNeeded = true;
+bool _disablePlatformOverride = false;
+PathProviderPlatform __platform;
 
+// This is to manually endorse the linux path provider until automatic registration of dart plugins is implemented.
+// See this issue https://github.com/flutter/flutter/issues/52267 for details
 PathProviderPlatform get _platform {
-  // This is to manually endorse Dart implementations until automatic
-  // registration of Dart plugins is implemented. For details see
-  // https://github.com/flutter/flutter/issues/52267.
-  if (_manualDartRegistrationNeeded) {
-    // Only do the initial registration if it hasn't already been overridden
-    // with a non-default instance.
-    if (!kIsWeb && PathProviderPlatform.instance is MethodChannelPathProvider) {
-      if (Platform.isLinux) {
-        PathProviderPlatform.instance = PathProviderLinux();
-      } else if (Platform.isWindows) {
-        PathProviderPlatform.instance = PathProviderWindows();
-      }
-    }
-    _manualDartRegistrationNeeded = false;
+  if (__platform != null) {
+    return __platform;
   }
-
-  return PathProviderPlatform.instance;
+  if (!kIsWeb && Platform.isLinux && !_disablePlatformOverride) {
+    __platform = PathProviderLinux();
+  } else {
+    __platform = PathProviderPlatform.instance;
+  }
+  return __platform;
 }
 
 /// Path to the temporary directory on the device that is not backed up and is
